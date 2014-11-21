@@ -1,34 +1,28 @@
 package meshutil
 
-type ArrayBuffer []float32
+type ArrayBuffer []Triangle
 
-func (buf *ArrayBuffer) NumVertices() uint {
-	return uint(len(*buf)) / 3
+func (this *ArrayBuffer) NumTriangles() int {
+	return len(*this)
 }
 
-func (buf *ArrayBuffer) NumTriangles() uint {
-	return buf.NumVertices() / 3
-}
-
-func (buf *ArrayBuffer) read() <-chan vertex {
-	verts := make(chan vertex)
+func (this *ArrayBuffer) read() <-chan Triangle {
+	triChan := make(chan Triangle)
 	go func() {
-		var vert vertex
-		for bufPos := 0; bufPos < len(*buf); bufPos += len(vert) {
-			copy(vert[:], (*buf)[bufPos:])
-			verts <- vert
+		for _, tri := range *this {
+			triChan <- tri
 		}
 
-		close(verts)
+		close(triChan)
 	}()
 
-	return verts
+	return triChan
 }
 
-func (buf *ArrayBuffer) ConvertFrom(mesh Mesh) {
-	newBuf := make(ArrayBuffer, 0, mesh.NumVertices()*3)
-	for vertex := range mesh.read() {
-		newBuf = append(newBuf, vertex[:]...)
+func (this *ArrayBuffer) ConvertFrom(mesh Mesh) {
+	*this = make(ArrayBuffer, 0, mesh.NumTriangles()*3)
+
+	for tri := range mesh.read() {
+		*this = append(*this, tri)
 	}
-	*buf = newBuf
 }

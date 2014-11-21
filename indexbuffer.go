@@ -1,46 +1,57 @@
 package meshutil
 
+import "github.com/ungerik/go3d/vec3"
+
+type Face [3]uint16
+
 type IndexBuffer struct {
-	Vertices []float32
-	Indices  []uint16
+	Vertices []vec3.T
+	Faces    []Face
 }
 
-func (buf *IndexBuffer) NumVertices() uint {
-	return uint(len(buf.Indices))
+func (this *IndexBuffer) NumTriangles() int {
+	return len(this.Faces)
 }
 
-func (buf *IndexBuffer) NumTriangles() uint {
-	return buf.NumVertices() / 3
-}
-
-func (buf *IndexBuffer) read() <-chan vertex {
-	vertChan := make(chan vertex)
+func (this *IndexBuffer) read() <-chan Triangle {
+	triChan := make(chan Triangle)
 	go func() {
-		var vert vertex
-		for _, vertIndex := range buf.Indices {
-			copy(vert[:], buf.Vertices[int(vertIndex)*len(vert):])
-			vertChan <- vert
+		for _, face := range this.Faces {
+			triChan <- Triangle{
+				this.Vertices[face[0]],
+				this.Vertices[face[1]],
+				this.Vertices[face[2]],
+			}
 		}
 
-		close(vertChan)
+		close(triChan)
 	}()
 
-	return vertChan
+	return triChan
 }
 
-func (buf *IndexBuffer) ConvertFrom(mesh Mesh) {
-	uniqueVertices := make(map[vertex]uint16)
+func (this *IndexBuffer) ConvertFrom(mesh Mesh) {
+	this.Vertices = make([]vec3.T, 0)
+	this.Faces = make([]Face, mesh.NumTriangles())
+
+	uniqueVertices := make(map[vec3.T]uint16)
 	var currIndex uint16
 
-	for vert := range mesh.read() {
-		index, exists := uniqueVertices[vert]
-		if !exists {
-			buf.Vertices = append(buf.Vertices, (vert)[:]...)
-			uniqueVertices[vert] = currIndex
+	var face Face
+	for tri := range mesh.read() {
+		for i, vert := range tri[:] {
+			index, exists := uniqueVertices[vert]
 
-			index = currIndex
-			currIndex++
+			if !exists {
+				this.Vertices = append(this.Vertices, vert)
+				uniqueVertices[vert] = currIndex
+
+				index = currIndex
+				currIndex++
+			}
+			face[i] = index
 		}
-		buf.Indices = append(buf.Indices, index)
+
+		this.Faces = append(this.Faces, face)
 	}
 }

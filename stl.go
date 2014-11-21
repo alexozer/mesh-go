@@ -4,12 +4,19 @@ import (
 	"encoding/binary"
 	"errors"
 	"os"
+
+	"github.com/ungerik/go3d/vec3"
+)
+
+const (
+	uint16Size  = 2
+	uint32Size  = 4
+	float32Size = 4
 )
 
 var (
-	errFormat             = errors.New("wrong file format")
-	errSize               = errors.New("reported face count does not match actual")
-	errIncompleteTriangle = errors.New("vertices received not divisible by 3")
+	errFormat = errors.New("wrong file format")
+	errSize   = errors.New("reported face count does not match actual")
 )
 
 func IsFormat(err error) bool {
@@ -20,10 +27,6 @@ func IsSize(err error) bool {
 	return err == errSize
 }
 
-func IsIncompleteTriangle(err error) bool {
-	return err == errIncompleteTriangle
-}
-
 const (
 	asciiId   = "solid"
 	headerLen = 80
@@ -31,8 +34,8 @@ const (
 
 // StlFile reads from an existing .stl file or creates a new one if it doesn't exist.
 type StlFile struct {
-	path      string
-	triangles uint32
+	path         string
+	numTriangles int
 }
 
 func NewStlFile(filepath string) (*StlFile, error) {
@@ -68,7 +71,7 @@ func NewStlFile(filepath string) (*StlFile, error) {
 	return &stlFile, nil
 }
 
-func (file *StlFile) isBinary(stlFile *os.File) (result bool, err error) {
+func (this *StlFile) isBinary(stlFile *os.File) (result bool, err error) {
 	if _, err = stlFile.Seek(0, 0); err != nil {
 		return
 	}
@@ -81,18 +84,20 @@ func (file *StlFile) isBinary(stlFile *os.File) (result bool, err error) {
 	return string(asciiText) != asciiId, nil
 }
 
-func (file *StlFile) readTriangleCount(stlFile *os.File) (err error) {
+func (this *StlFile) readTriangleCount(stlFile *os.File) (err error) {
 	_, err = stlFile.Seek(headerLen, 0)
 	if err != nil {
 		return
 	}
 
-	err = binary.Read(stlFile, binary.LittleEndian, &file.triangles)
+	var numTriangles uint32
+	err = binary.Read(stlFile, binary.LittleEndian, &numTriangles)
 	if err != nil {
 		return
 	}
+	this.numTriangles = int(numTriangles)
 
-	var meshSize int64 = int64(file.triangles) * (3*4*float32Size + uint16Size)
+	var meshSize int64 = int64(this.numTriangles) * (3*4*float32Size + uint16Size)
 	var fileSize int64 = headerLen + uint32Size + meshSize
 
 	stats, err := stlFile.Stat()
@@ -106,49 +111,45 @@ func (file *StlFile) readTriangleCount(stlFile *os.File) (err error) {
 	return
 }
 
-func (stl *StlFile) read() <-chan vertex {
-	verts := make(chan vertex)
+func (this *StlFile) read() <-chan Triangle {
+	triChan := make(chan Triangle)
 	go func() {
-		file, err := os.Open(stl.path)
+		file, err := os.Open(this.path)
 		if err != nil {
 			panic(err)
 		}
 		defer file.Close()
 		file.Seek(headerLen+uint32Size, 0)
 
-		var triangle stlTriangle
+		var incomingTri stlTriangle
 
-		var currTriangle uint32
-		for ; currTriangle < stl.triangles; currTriangle++ {
-			binary.Read(file, binary.LittleEndian, &triangle)
-			verts <- triangle.Vert1
-			verts <- triangle.Vert2
-			verts <- triangle.Vert3
+		var currTriangle int
+		for ; currTriangle < this.numTriangles; currTriangle++ {
+			binary.Read(file, binary.LittleEndian, &incomingTri)
+			triChan <- incomingTri.Tri
 		}
 
-		close(verts)
+		close(triChan)
 	}()
 
-	return verts
+	return triChan
 }
 
 type stlTriangle struct {
-	Normal [3]float32
-	Vert1  vertex
-	Vert2  vertex
-	Vert3  vertex
-	_      uint16
+	_   vec3.T // Normal
+	Tri Triangle
+	_   uint16 // Extra info
 }
 
-func (stl *StlFile) ConvertFrom(mesh Mesh) {
-	stl.triangles = uint32(mesh.NumTriangles())
+func (this *StlFile) ConvertFrom(mesh Mesh) {
+	this.numTriangles = mesh.NumTriangles()
 
-	err := os.Remove(stl.path)
+	err := os.Remove(this.path)
 	if err != nil && !os.IsNotExist(err) {
 		panic(err)
 	}
 
-	file, err := os.Create(stl.path)
+	file, err := os.Create(this.path)
 	if err != nil {
 		panic(err)
 	}
@@ -163,30 +164,18 @@ func (stl *StlFile) ConvertFrom(mesh Mesh) {
 		panic(err)
 	}
 
-	err = binary.Write(file, binary.LittleEndian, stl.triangles)
+	err = binary.Write(file, binary.LittleEndian, uint32(this.numTriangles))
 	if err != nil {
 		panic(err)
 	}
 
-	vertChan := mesh.read()
-	triangle := stlTriangle{}
-	for triangle.Vert1 = range vertChan {
-		var ok bool // Don't know why Go won't let me define 'ok' with := below
-		triangle.Vert2, ok = <-vertChan
-		var ok2 bool
-		triangle.Vert3, ok2 = <-vertChan
-		if !(ok && ok2) {
-			panic(errIncompleteTriangle)
-		}
-
-		binary.Write(file, binary.LittleEndian, triangle)
+	var stlTri stlTriangle
+	for tri := range mesh.read() {
+		stlTri.Tri = tri
+		binary.Write(file, binary.LittleEndian, stlTri)
 	}
 }
 
-func (file *StlFile) NumTriangles() uint {
-	return uint(file.triangles)
-}
-
-func (file *StlFile) NumVertices() uint {
-	return file.NumTriangles() * 3
+func (this *StlFile) NumTriangles() int {
+	return this.numTriangles
 }

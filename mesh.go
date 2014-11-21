@@ -1,17 +1,11 @@
 package meshutil
 
-type vertex [3]float32
+import "github.com/ungerik/go3d/vec3"
 
-// TODO: remove NumVertices()
+type Triangle [3]vec3.T
+
 type Mesh interface {
-	NumVertices() uint
-	NumTriangles() uint
-	read() <-chan vertex
+	NumTriangles() int
+	read() <-chan Triangle
 	ConvertFrom(Mesh)
 }
-
-const (
-	uint16Size  = 2
-	uint32Size  = 4
-	float32Size = 4
-)
