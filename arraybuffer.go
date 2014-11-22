@@ -1,4 +1,4 @@
-package meshutil
+package mesh
 
 type ArrayBuffer []Triangle
 

@@ -1,4 +1,4 @@
-package meshutil
+package mesh
 
 import "github.com/ungerik/go3d/vec3"
 

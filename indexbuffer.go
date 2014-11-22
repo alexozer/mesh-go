@@ -1,4 +1,4 @@
-package meshutil
+package mesh
 
 import "github.com/ungerik/go3d/vec3"
 
@@ -32,7 +32,7 @@ func (this *IndexBuffer) read() <-chan Triangle {
 
 func (this *IndexBuffer) ConvertFrom(mesh Mesh) {
 	this.Vertices = make([]vec3.T, 0)
-	this.Faces = make([]Face, mesh.NumTriangles())
+	this.Faces = make([]Face, 0, mesh.NumTriangles())
 
 	uniqueVertices := make(map[vec3.T]uint16)
 	var currIndex uint16

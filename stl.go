@@ -1,4 +1,4 @@
-package meshutil
+package mesh
 
 import (
 	"encoding/binary"

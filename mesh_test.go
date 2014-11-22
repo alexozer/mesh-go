@@ -1,6 +1,7 @@
-package meshutil
+package mesh
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -33,18 +34,41 @@ func TestStl(t *testing.T) {
 	cubeArray2 := ArrayBuffer{}
 	cubeArray2.ConvertFrom(stl2)
 
-	if !equal(cubeArray1, cubeArray2) {
+	if !cubeArray1.Equals(&cubeArray2) {
 		t.Fatal("Stl conversion error")
 	}
 }
 
-func equal(mesh1, mesh2 ArrayBuffer) bool {
-	if len(mesh1) != len(mesh2) {
+func TestArrays(t *testing.T) {
+	stl, err := NewStlFile(cubePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	abuf1 := ArrayBuffer{}
+	abuf1.ConvertFrom(stl)
+	abuf2 := ArrayBuffer{}
+	abuf2.ConvertFrom(&abuf1)
+	if !abuf1.Equals(&abuf2) {
+		t.Fatal("ArrayBuffer conversions differ")
+	}
+
+	ibuf := IndexBuffer{}
+	ibuf.ConvertFrom(&abuf1)
+	abuf2.ConvertFrom(&ibuf)
+	if !abuf1.Equals(&abuf2) {
+		fmt.Println(ibuf)
+		t.Fatal("IndexBuffer conversions differ")
+	}
+}
+
+func (this *ArrayBuffer) Equals(other *ArrayBuffer) bool {
+	if len(*this) != len(*other) {
 		return false
 	}
 
-	for i, val := range mesh1 {
-		if val != mesh2[i] {
+	for i, val := range *this {
+		if val != (*other)[i] {
 			return false
 		}
 	}
