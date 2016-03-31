@@ -1,6 +1,6 @@
 package mesh
 
-import "github.com/ungerik/go3d/vec3"
+import "github.com/ungerik/go3d/float64/vec3"
 
 type Triangle [3]vec3.T
 
